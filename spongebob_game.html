@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SpongeBob Bubble Blaster: Gun & Blast Animation</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let spongeBob = {
+            x: 50,
+            y: 300,
+            width: 40,
+            height: 50,
+            dy: 0,
+            gravity: 0.6,
+            jumpPower: -12,
+            isJumping: false,
+            speedBoost: false,
+            boostTimer: 0,
+            shootCooldown: 0,
+            shooting: false,
+            shootAnimationTimer: 0
+        };
+
+        let jellyfish = {
+            x: 800,
+            y: 320,
+            width: 40,
+            height: 30,
+            dx: -4,
+            speedIncrease: 0.005,
+            zapTimer: 180,
+            pulse: 0
+        };
+
+        let bubbles = [];
+        let zaps = [];
+        let powerUp = { x: 900, y: 200, radius: 10, dx: -2, active: false };
+        let blastParticles = []; // New array for blast animation
+        let score = 0;
+        let gameOver = false;
+
+        let waterOffset = 0;
+        let bubbleList = [];
+        let seaweed = [
+            { x: 100, y: 350, height: 50, sway: 0 },
+            { x: 300, y: 350, height: 60, sway: 0 },
+            { x: 500, y: 350, height: 40, sway: 0 },
+            { x: 700, y: 350, height: 55, sway: 0 }
+        ];
+
+        const jumpSound = new Audio('https://www.myinstants.com/media/sounds/spongebob-laugh.mp3');
+        const shootSound = new Audio('https://www.myinstants.com/media/sounds/bubble-pop.mp3');
+        const gameOverSound = new Audio('https://www.myinstants.com/media/sounds/spongebob-fail.mp3');
+        const boostSound = new Audio('https://www.myinstants.com/media/sounds/spongebob-run.mp3');
+
+        function drawSpongeBob() {
+            const gradient = ctx.createLinearGradient(spongeBob.x, spongeBob.y, spongeBob.x + spongeBob.width, spongeBob.y + spongeBob.height);
+            gradient.addColorStop(0, spongeBob.speedBoost ? '#FFA500' : '#FFFF99');
+            gradient.addColorStop(1, spongeBob.speedBoost ? '#FF4500' : '#FFD700');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(spongeBob.x, spongeBob.y, spongeBob.width, spongeBob.height);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(spongeBob.x + spongeBob.width - 5, spongeBob.y, 5, spongeBob.height);
+            ctx.fillRect(spongeBob.x, spongeBob.y + spongeBob.height - 5, spongeBob.width, 5);
+            ctx.fillStyle = 'limegreen';
+            ctx.beginPath();
+            ctx.arc(spongeBob.x + 10, spongeBob.y + 40, 3, 0, Math.PI * 2);
+            ctx.arc(spongeBob.x + 30, spongeBob.y + 35, 4, 0, Math.PI * 2);
+            ctx.fill();
+            const eyeGradient = ctx.createRadialGradient(spongeBob.x + 12, spongeBob.y + 10, 2, spongeBob.x + 12, spongeBob.y + 10, 6);
+            eyeGradient.addColorStop(0, '#FFFFFF');
+            eyeGradient.addColorStop(1, '#D3D3D3');
+            ctx.fillStyle = eyeGradient;
+            ctx.beginPath();
+            ctx.arc(spongeBob.x + 12, spongeBob.y + 10, 6, 0, Math.PI * 2);
+            ctx.arc(spongeBob.x + 28, spongeBob.y + 10, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(spongeBob.x + 12, spongeBob.y + 10, 3, 0, Math.PI * 2);
+            ctx.arc(spongeBob.x + 28, spongeBob.y + 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(spongeBob.x + 20, spongeBob.y + 20, 10, 0, Math.PI);
+            ctx.stroke();
+
+            ctx.strokeStyle = spongeBob.speedBoost ? '#FF4500' : '#FFD700';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(spongeBob.x, spongeBob.y + 20);
+            ctx.lineTo(spongeBob.x - 10, spongeBob.y + 30);
+            ctx.stroke();
+
+            ctx.save();
+            ctx.translate(spongeBob.x + spongeBob.width, spongeBob.y + 20);
+            if (spongeBob.shooting) {
+                ctx.rotate(-Math.PI / 6);
+            }
+            ctx.strokeStyle = spongeBob.speedBoost ? '#FF4500' : '#FFD700';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(15, 5);
+            ctx.stroke();
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(15, 0, 10, 6);
+            ctx.fillStyle = '#4682B4';
+            ctx.fillRect(25, 2, 5, 2);
+            ctx.restore();
+
+            ctx.strokeStyle = spongeBob.speedBoost ? '#FF4500' : '#FFD700';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(spongeBob.x + 10, spongeBob.y + spongeBob.height);
+            ctx.lineTo(spongeBob.x + 10, spongeBob.y + spongeBob.height + 10);
+            ctx.moveTo(spongeBob.x + 30, spongeBob.y + spongeBob.height);
+            ctx.lineTo(spongeBob.x + 30, spongeBob.y + spongeBob.height + 10);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(spongeBob.x + spongeBob.width / 2, spongeBob.y + spongeBob.height + 5, 20, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawJellyfish() {
+            jellyfish.pulse = (jellyfish.pulse + 0.05) % (Math.PI * 2);
+            const pulseScale = 1 + Math.sin(jellyfish.pulse) * 0.1;
+            const gradient = ctx.createRadialGradient(
+                jellyfish.x + jellyfish.width / 2, jellyfish.y + jellyfish.height / 2, 5,
+                jellyfish.x + jellyfish.width / 2, jellyfish.y + jellyfish.height / 2, jellyfish.width / 2
+            );
+            gradient.addColorStop(0, '#FFB6C1');
+            gradient.addColorStop(1, '#FF69B4');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(jellyfish.x + jellyfish.width / 2, jellyfish.y + jellyfish.height / 2, jellyfish.width / 2 * pulseScale, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'purple';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(jellyfish.x + 10, jellyfish.y + jellyfish.height);
+            ctx.quadraticCurveTo(jellyfish.x + 5, jellyfish.y + jellyfish.height + 15, jellyfish.x + 5, jellyfish.y + jellyfish.height + 20);
+            ctx.moveTo(jellyfish.x + 20, jellyfish.y + jellyfish.height);
+            ctx.quadraticCurveTo(jellyfish.x + 25, jellyfish.y + jellyfish.height + 15, jellyfish.x + 25, jellyfish.y + jellyfish.height + 20);
+            ctx.moveTo(jellyfish.x + 30, jellyfish.y + jellyfish.height);
+            ctx.quadraticCurveTo(jellyfish.x + 35, jellyfish.y + jellyfish.height + 15, jellyfish.x + 35, jellyfish.y + jellyfish.height + 20);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(jellyfish.x + jellyfish.width / 2, jellyfish.y + jellyfish.height + 25, 15 * pulseScale, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawBubbles() {
+            bubbles.forEach(bubble => {
+                const gradient = ctx.createRadialGradient(bubble.x, bubble.y, 2, bubble.x, bubble.y, 5);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0.5)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(bubble.x, bubble.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawZaps() {
+            zaps.forEach(zap => {
+                const gradient = ctx.createLinearGradient(zap.x, zap.y, zap.x + 20, zap.y);
+                gradient.addColorStop(0, '#FFFF00');
+                gradient.addColorStop(1, '#FFD700');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(zap.x, zap.y, 20, 5);
+            });
+        }
+
+        function drawBlastParticles() {
+            blastParticles.forEach((particle, index) => {
+                particle.timer--;
+                particle.x += particle.dx;
+                particle.y += particle.dy;
+                particle.radius *= 0.95; // Shrink over time
+                particle.alpha -= 0.05; // Fade out
+                if (particle.timer <= 0) {
+                    blastParticles.splice(index, 1);
+                } else {
+                    ctx.fillStyle = `rgba(${particle.color === 'pink' ? '255, 182, 193' : '128, 0, 128'}, ${particle.alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        function createBlast(x, y) {
+            for (let i = 0; i < 10; i++) {
+                blastParticles.push({
+                    x: x,
+                    y: y,
+                    radius: Math.random() * 5 + 2,
+                    dx: (Math.random() - 0.5) * 4,
+                    dy: (Math.random() - 0.5) * 4,
+                    timer: 30, // Lasts 0.5 seconds at 60 FPS
+                    alpha: 1,
+                    color: Math.random() < 0.5 ? 'pink' : 'purple'
+                });
+            }
+        }
+
+        function drawPowerUp() {
+            if (powerUp.active) {
+                const gradient = ctx.createRadialGradient(powerUp.x, powerUp.y, 2, powerUp.x, powerUp.y, powerUp.radius);
+                gradient.addColorStop(0, '#FFD700');
+                gradient.addColorStop(1, '#FFA500');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(powerUp.x, powerUp.y, powerUp.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawBackground() {
+            waterOffset = (waterOffset + 0.02) % (Math.PI * 2);
+            const waterGradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            waterGradient.addColorStop(0, `hsl(195, 85%, ${50 + Math.sin(waterOffset) * 10}%)`);
+            waterGradient.addColorStop(1, `hsl(195, 85%, ${40 + Math.sin(waterOffset + 1) * 10}%)`);
+            ctx.fillStyle = waterGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#F4A460';
+            ctx.fillRect(0, 350, canvas.width, 50);
+            seaweed.forEach(plant => {
+                plant.sway = (plant.sway + 0.05) % (Math.PI * 2);
+                const swayOffset = Math.sin(plant.sway) * 5;
+                ctx.fillStyle = '#228B22';
+                ctx.beginPath();
+                ctx.moveTo(plant.x, plant.y);
+                ctx.quadraticCurveTo(plant.x + swayOffset, plant.y - plant.height / 2, plant.x, plant.y - plant.height);
+                ctx.quadraticCurveTo(plant.x - swayOffset, plant.y - plant.height / 2, plant.x, plant.y);
+                ctx.fill();
+            });
+            if (Math.random() < 0.1) {
+                bubbleList.push({
+                    x: Math.random() * canvas.width,
+                    y: 400,
+                    radius: Math.random() * 5 + 2,
+                    dy: -(Math.random() * 1 + 0.5)
+                });
+            }
+            bubbleList = bubbleList.filter(b => b.y > 0);
+            bubbleList.forEach(b => {
+                b.y += b.dy;
+                const gradient = ctx.createRadialGradient(b.x, b.y, 1, b.x, b.y, b.radius);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0.2)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function resetJellyfish() {
+            jellyfish = {
+                x: 800,
+                y: 320 - Math.random() * 100,
+                width: 40,
+                height: 30,
+                dx: -4,
+                speedIncrease: 0.005,
+                zapTimer: 180,
+                pulse: 0
+            };
+        }
+
+        function update() {
+            if (!gameOver) {
+                spongeBob.dy += spongeBob.gravity;
+                spongeBob.y += spongeBob.dy;
+                if (spongeBob.y > 300) {
+                    spongeBob.y = 300;
+                    spongeBob.dy = 0;
+                    spongeBob.isJumping = false;
+                }
+                if (spongeBob.shootCooldown > 0) spongeBob.shootCooldown--;
+                if (spongeBob.shooting) {
+                    spongeBob.shootAnimationTimer--;
+                    if (spongeBob.shootAnimationTimer <= 0) spongeBob.shooting = false;
+                }
+
+                if (spongeBob.speedBoost) {
+                    spongeBob.boostTimer--;
+                    if (spongeBob.boostTimer <= 0) spongeBob.speedBoost = false;
+                }
+
+                jellyfish.dx -= jellyfish.speedIncrease;
+                jellyfish.x += jellyfish.dx;
+
+                jellyfish.zapTimer--;
+                if (jellyfish.zapTimer <= 0) {
+                    zaps.push({ x: jellyfish.x, y: jellyfish.y + jellyfish.height / 2, dx: -5 });
+                    jellyfish.zapTimer = 180;
+                }
+
+                if (jellyfish.x < -jellyfish.width) {
+                    resetJellyfish();
+                    score += 1;
+                }
+
+                bubbles.forEach((bubble, bIndex) => {
+                    bubble.x += 8;
+                    const distance = Math.sqrt(
+                        (bubble.x - (jellyfish.x + jellyfish.width / 2)) ** 2 +
+                        (bubble.y - (jellyfish.y + jellyfish.height / 2)) ** 2
+                    );
+                    if (distance < (jellyfish.width / 2 + 5)) {
+                        createBlast(jellyfish.x + jellyfish.width / 2, jellyfish.y + jellyfish.height / 2); // Trigger blast
+                        resetJellyfish();
+                        bubbles.splice(bIndex, 1);
+                        score += 10;
+                    }
+                    if (bubble.x > canvas.width) bubbles.splice(bIndex, 1);
+                });
+
+                zaps.forEach((zap, index) => {
+                    zap.x += zap.dx;
+                    if (zap.x < spongeBob.x + spongeBob.width &&
+                        zap.x + 20 > spongeBob.x &&
+                        zap.y < spongeBob.y + spongeBob.height &&
+                        zap.y + 5 > spongeBob.y) {
+                        gameOver = true;
+                        gameOverSound.play();
+                    }
+                    if (zap.x < -20) zaps.splice(index, 1);
+                });
+
+                if (powerUp.active) {
+                    powerUp.x += powerUp.dx;
+                    if (powerUp.x < spongeBob.x + spongeBob.width &&
+                        powerUp.x + powerUp.radius > spongeBob.x &&
+                        powerUp.y < spongeBob.y + spongeBob.height &&
+                        powerUp.y + powerUp.radius > spongeBob.y) {
+                        powerUp.active = false;
+                        spongeBob.speedBoost = true;
+                        spongeBob.boostTimer = 300;
+                        boostSound.play();
+                    }
+                    if (powerUp.x < -powerUp.radius) powerUp.active = false;
+                } else if (Math.random() < 0.05) powerUp.active = true;
+
+                if (spongeBob.x < jellyfish.x + jellyfish.width &&
+                    spongeBob.x + spongeBob.width > jellyfish.x &&
+                    spongeBob.y < jellyfish.y + jellyfish.height &&
+                    spongeBob.y + spongeBob.height > jellyfish.y) {
+                    gameOver = true;
+                    gameOverSound.play();
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            drawSpongeBob();
+            drawJellyfish();
+            drawBubbles();
+            drawZaps();
+            drawBlastParticles(); // Draw blast particles
+            drawPowerUp();
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText('Score: ' + score, 10, 30);
+            ctx.fillText('Controls: Space (Jump), Enter (Shoot)', 10, 50);
+            if (spongeBob.speedBoost) ctx.fillText('Speed Boost!', 10, 70);
+            if (gameOver) {
+                ctx.fillText('Game Over! Press Space to Restart', 250, 200);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (!spongeBob.isJumping && !gameOver) {
+                    spongeBob.dy = spongeBob.jumpPower * (spongeBob.speedBoost ? 1.5 : 1);
+                    spongeBob.isJumping = true;
+                    jumpSound.play();
+                } else if (gameOver) {
+                    spongeBob.y = 300;
+                    resetJellyfish();
+                    score = 0;
+                    bubbles = [];
+                    zaps = [];
+                    blastParticles = [];
+                    powerUp.active = false;
+                    spongeBob.speedBoost = false;
+                    gameOver = false;
+                }
+            } else if (e.key === 'Enter' && !gameOver && spongeBob.shootCooldown <= 0) {
+                bubbles.push({ x: spongeBob.x + spongeBob.width + 15, y: spongeBob.y + 20 });
+                shootSound.play();
+                spongeBob.shootCooldown = 30;
+                spongeBob.shooting = true;
+                spongeBob.shootAnimationTimer = 15;
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
